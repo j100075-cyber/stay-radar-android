@@ -5,7 +5,10 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "payload/**"
+      - "app/**"
+      - "settings.gradle"
+      - "build.gradle"
+      - "gradle.properties"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -14,12 +17,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Rebuild Android project
-        run: |
-          cat payload/part_* | base64 -d > stay-radar-source.zip
-          unzip -q stay-radar-source.zip
-          test -f stay_radar_android/settings.gradle
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -41,12 +38,10 @@ jobs:
           gradle-version: "8.11.1"
 
       - name: Build APK
-        working-directory: stay_radar_android
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Prepare APK
-        run: |
-          cp stay_radar_android/app/build/outputs/apk/debug/app-debug.apk StayRadar.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk StayRadar.apk
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
