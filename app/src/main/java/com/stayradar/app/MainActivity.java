@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     private LinearLayout results;
     private EditText apiKey, region, checkIn, checkOut, adults;
     private CheckBox flex;
+    private Spinner lodgingType;
     private ProgressBar progress;
     private TextView status;
 
@@ -92,6 +93,16 @@ public class MainActivity extends Activity {
         root.addView(label("성인 인원"));
         root.addView(adults);
 
+        root.addView(label("숙소 유형"));
+        lodgingType = new Spinner(this);
+        String[] types = new String[]{"전체 (호텔 + 펜션·풀빌라)", "호텔", "펜션·풀빌라·독채"};
+        ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, types);
+        lodgingType.setAdapter(typeAdapter);
+        root.addView(lodgingType);
+        TextView typeNote = text("※ 전체 검색은 호텔과 펜션을 각각 조회합니다. ±1일까지 켜면 API 사용량이 늘어납니다.", 12, false);
+        typeNote.setTextColor(Color.GRAY);
+        root.addView(typeNote);
+
         flex = new CheckBox(this);
         flex.setText("±1일 최저가 비교");
         flex.setTextSize(15);
@@ -145,6 +156,7 @@ public class MainActivity extends Activity {
         final int a = adultCount;
         final LocalDate fci = ci;
         final LocalDate fco = co;
+        final int typeMode = lodgingType.getSelectedItemPosition();
         executor.execute(() -> {
             try {
                 List<Stay> all = new ArrayList<>();
@@ -152,7 +164,12 @@ public class MainActivity extends Activity {
                 for (int offset : offsets) {
                     LocalDate xci = fci.plusDays(offset);
                     LocalDate xco = fco.plusDays(offset);
-                    all.addAll(fetchHotels(q, xci, xco, a, key));
+                    if (typeMode == 0 || typeMode == 1) {
+                        all.addAll(fetchHotels(q, xci, xco, a, key, false));
+                    }
+                    if (typeMode == 0 || typeMode == 2) {
+                        all.addAll(fetchHotels(q, xci, xco, a, key, true));
+                    }
                 }
                 Map<String,Stay> best = new LinkedHashMap<>();
                 for (Stay s : all) {
@@ -172,13 +189,14 @@ public class MainActivity extends Activity {
         });
     }
 
-    private List<Stay> fetchHotels(String q, LocalDate ci, LocalDate co, int adults, String key) throws Exception {
+    private List<Stay> fetchHotels(String q, LocalDate ci, LocalDate co, int adults, String key, boolean vacationRental) throws Exception {
         String url = "https://serpapi.com/search.json?engine=google_hotels"
                 + "&q=" + enc(q)
                 + "&check_in_date=" + ci
                 + "&check_out_date=" + co
                 + "&adults=" + adults
-                + "&currency=KRW&gl=kr&hl=ko"
+                + "&currency=KRW&gl=kr&hl=ko&sort_by=3"
+                + (vacationRental ? "&vacation_rentals=true" : "")
                 + "&api_key=" + enc(key);
 
         JSONObject json = getJson(url);
@@ -207,7 +225,8 @@ public class MainActivity extends Activity {
 
             double rating = p.optDouble("overall_rating", 0);
             int reviews = p.optInt("reviews", 0);
-            out.add(new Stay(name, total, nightly, rating, reviews, ci.toString(), link));
+            String typeLabel = vacationRental ? "펜션·풀빌라·독채" : "호텔";
+            out.add(new Stay(name, total, nightly, rating, reviews, ci.toString(), link, typeLabel));
         }
         return out;
     }
@@ -253,7 +272,8 @@ public class MainActivity extends Activity {
 
             String dateText = s.date.equals(requested.toString()) ? "" : "  ·  더 저렴한 날짜 " + s.date;
             TextView meta = text(
-                    (s.rating > 0 ? "⭐ " + s.rating + (s.reviews > 0 ? " · 리뷰 " + s.reviews + "개" : "") : "")
+                    "🏡 " + s.type
+                            + (s.rating > 0 ? " · ⭐ " + s.rating + (s.reviews > 0 ? " · 리뷰 " + s.reviews + "개" : "") : "")
                             + dateText, 13, false);
             meta.setTextColor(Color.DKGRAY);
             card.addView(meta);
@@ -272,7 +292,7 @@ public class MainActivity extends Activity {
 
             Button fresh = button("신상 / 신규오픈 정보 검색");
             fresh.setOnClickListener(v -> open("https://www.google.com/search?q=" +
-                    enc(s.name + " 신상숙소 신규오픈 신축호텔 인스타 네이버")));
+                    enc(s.name + " 신상숙소 신규오픈 신축 펜션 풀빌라 호텔 인스타 네이버")));
             card.addView(fresh);
 
             results.addView(card);
@@ -350,11 +370,11 @@ public class MainActivity extends Activity {
     }
 
     private static class Stay {
-        String name, date, link;
+        String name, date, link, type;
         double total, nightly, rating;
         int reviews;
-        Stay(String n,double t,double p,double r,int rv,String d,String l) {
-            name=n; total=t; nightly=p; rating=r; reviews=rv; date=d; link=l;
+        Stay(String n,double t,double p,double r,int rv,String d,String l,String ty) {
+            name=n; total=t; nightly=p; rating=r; reviews=rv; date=d; link=l; type=ty;
         }
     }
 
